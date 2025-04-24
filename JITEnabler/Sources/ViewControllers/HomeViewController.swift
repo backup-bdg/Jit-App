@@ -101,7 +101,7 @@ class HomeViewController: UIViewController {
     
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         if segue.identifier == "ShowAppList", let category = sender as? AppCategory {
-            let appListVC = segue.destination as! AppListViewController
+            guard let appListVC = segue.destination as? AppListViewController else { return }
             appListVC.category = category
         }
     }
@@ -249,7 +249,7 @@ extension HomeViewController {
                     
                     // Show JIT status screen
                     let storyboard = UIStoryboard(name: "Main", bundle: nil)
-                    let jitStatusVC = storyboard.instantiateViewController(withIdentifier: "JITStatusViewController") as! JITStatusViewController
+                    guard let jitStatusVC = storyboard.instantiateViewController(withIdentifier: "JITStatusViewController") as? JITStatusViewController else { return }
                     jitStatusVC.configure(with: app, response: response)
                     self?.navigationController?.pushViewController(jitStatusVC, animated: true)
                     

@@ -148,7 +148,7 @@ class AppListViewController: UIViewController {
                     
                     // Show JIT status screen
                     let storyboard = UIStoryboard(name: "Main", bundle: nil)
-                    let jitStatusVC = storyboard.instantiateViewController(withIdentifier: "JITStatusViewController") as! JITStatusViewController
+                    guard let jitStatusVC = storyboard.instantiateViewController(withIdentifier: "JITStatusViewController") as? JITStatusViewController else { return }
                     jitStatusVC.configure(with: app, response: response)
                     self?.navigationController?.pushViewController(jitStatusVC, animated: true)
                     
