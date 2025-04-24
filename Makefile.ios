@@ -6,11 +6,15 @@ XCODE_SCHEME := JITEnabler
 BUNDLE_ID := com.jitenabler.app
 BUILD_DIR := build
 IPA_DIR := $(BUILD_DIR)/ios/ipa
+LOG_DIR := $(BUILD_DIR)/logs
 ARCHIVE_PATH := $(BUILD_DIR)/JITEnabler.xcarchive
 EXPORT_OPTIONS_PLIST := ExportOptions.plist
 DERIVED_DATA_PATH := $(BUILD_DIR)/DerivedData
-IPA_NAME := JITEnabler.ipa
 ENTITLEMENTS := JITEnabler/JITEnabler.entitlements
+VERSION := 1.1.0
+BUILD_NUMBER := $(shell date "+%Y%m%d%H%M")
+IPA_NAME := JITEnabler_$(VERSION)_$(BUILD_NUMBER).ipa
+IPA_LINK := JITEnabler.ipa
 
 # Tools
 XCODEBUILD := xcodebuild
@@ -19,6 +23,14 @@ RM := rm -rf
 CP := cp -r
 ZIP := zip -r
 PLISTBUDDY := /usr/libexec/PlistBuddy
+LN := ln -sf
+
+# Colors for console output
+CYAN := \033[0;36m
+GREEN := \033[0;32m
+YELLOW := \033[0;33m
+RED := \033[0;31m
+NC := \033[0m # No Color
 
 # Default target
 .PHONY: all
@@ -27,22 +39,19 @@ all: clean setup build-ipa
 # Clean build artifacts
 .PHONY: clean
 clean:
-	@echo "Cleaning build directory..."
+	@echo "$(CYAN)Cleaning build directory...$(NC)"
 	@$(RM) $(BUILD_DIR)
-	@$(MKDIR) $(BUILD_DIR) $(IPA_DIR)
+	@$(MKDIR) $(BUILD_DIR) $(IPA_DIR) $(LOG_DIR)
+	@echo "$(GREEN)✓ Cleaned build directory$(NC)"
 
 # Setup environment
 .PHONY: setup
-setup: .env $(EXPORT_OPTIONS_PLIST)
-
-.env:
-	@echo "Creating .env file..."
-	@echo "DROPBOX_APP_KEY=2bi422xpd3xd962" > $@
-	@echo "DROPBOX_APP_SECRET=j3yx0b41qdvfu86" >> $@
-	@echo "DROPBOX_REFRESH_TOKEN=RvyL03RE5qAAAAAAAAAAAVMVebvE7jDx8Okd0ploMzr85c6txvCRXpJAt30mxrKF" >> $@
+setup: $(EXPORT_OPTIONS_PLIST)
+	@echo "$(CYAN)Setting up build environment...$(NC)"
+	@echo "$(GREEN)✓ Build environment ready$(NC)"
 
 $(EXPORT_OPTIONS_PLIST):
-	@echo "Creating export options plist..."
+	@echo "$(CYAN)Creating export options plist...$(NC)"
 	@printf '<?xml version="1.0" encoding="UTF-8"?>\n' > $@
 	@printf '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' >> $@
 	@printf '<plist version="1.0">\n' >> $@
@@ -53,13 +62,28 @@ $(EXPORT_OPTIONS_PLIST):
 	@printf '\t<false/>\n' >> $@
 	@printf '\t<key>signingStyle</key>\n' >> $@
 	@printf '\t<string>automatic</string>\n' >> $@
+	@printf '\t<key>teamID</key>\n' >> $@
+	@printf '\t<string>AUTO</string>\n' >> $@
 	@printf '</dict>\n' >> $@
 	@printf '</plist>\n' >> $@
+	@echo "$(GREEN)✓ Created export options plist$(NC)"
+
+# Print build information
+.PHONY: print-info
+print-info:
+	@echo "$(CYAN)================================$(NC)"
+	@echo "$(CYAN)    JIT Enabler Build Config    $(NC)"
+	@echo "$(CYAN)================================$(NC)"
+	@echo "$(CYAN)Version:$(NC) $(VERSION)"
+	@echo "$(CYAN)Build:$(NC) $(BUILD_NUMBER)"
+	@echo "$(CYAN)Bundle ID:$(NC) $(BUNDLE_ID)"
+	@echo "$(CYAN)Output:$(NC) $(IPA_DIR)/$(IPA_NAME)"
+	@echo "$(CYAN)================================$(NC)"
 
 # Build for device (requires signing)
 .PHONY: build-device
-build-device:
-	@echo "Building for iOS device..."
+build-device: print-info
+	@echo "$(CYAN)Building for iOS device...$(NC)"
 	@$(XCODEBUILD) clean build \
 		-project $(XCODE_PROJECT) \
 		-scheme $(XCODE_SCHEME) \
@@ -68,51 +92,75 @@ build-device:
 		-derivedDataPath $(DERIVED_DATA_PATH) \
 		CODE_SIGN_IDENTITY="" \
 		CODE_SIGNING_REQUIRED=NO \
-		CODE_SIGNING_ALLOWED=NO
+		CODE_SIGNING_ALLOWED=NO \
+		CURRENT_PROJECT_VERSION="$(BUILD_NUMBER)" \
+		MARKETING_VERSION="$(VERSION)" \
+		| tee $(LOG_DIR)/build-device.log || { echo "$(RED)Error: Build failed. See $(LOG_DIR)/build-device.log for details.$(NC)"; exit 1; }
+	@echo "$(GREEN)✓ iOS device build completed$(NC)"
 
 # Build for simulator (no signing required)
 .PHONY: build-simulator
-build-simulator:
-	@echo "Building for iOS simulator..."
+build-simulator: print-info
+	@echo "$(CYAN)Building for iOS simulator...$(NC)"
 	@$(XCODEBUILD) clean build \
 		-project $(XCODE_PROJECT) \
 		-scheme $(XCODE_SCHEME) \
 		-configuration Debug \
 		-sdk iphonesimulator \
 		-derivedDataPath $(DERIVED_DATA_PATH) \
+		-destination 'platform=iOS Simulator,name=iPhone 14,OS=latest' \
 		CODE_SIGNING_REQUIRED=NO \
 		CODE_SIGNING_ALLOWED=NO \
-		CODE_SIGN_ENTITLEMENTS=$(ENTITLEMENTS)
+		CODE_SIGN_ENTITLEMENTS=$(ENTITLEMENTS) \
+		CURRENT_PROJECT_VERSION="$(BUILD_NUMBER)" \
+		MARKETING_VERSION="$(VERSION)" \
+		| tee $(LOG_DIR)/build-simulator.log || { echo "$(RED)Error: Build failed. See $(LOG_DIR)/build-simulator.log for details.$(NC)"; exit 1; }
+	@echo "$(GREEN)✓ iOS simulator build completed$(NC)"
 
-# Create IPA from simulator build
+# Create IPA from simulator build with enhanced error handling
 .PHONY: create-simulator-ipa
 create-simulator-ipa: build-simulator
-	@echo "Creating IPA from simulator build..."
+	@echo "$(CYAN)Creating IPA from simulator build...$(NC)"
 	@APP_PATH=$$(find $(DERIVED_DATA_PATH)/Build/Products -name "*.app" -type d | head -1); \
 	if [ -z "$$APP_PATH" ]; then \
-		echo "Error: Could not find .app file in build products"; \
+		echo "$(RED)Error: Could not find .app file in build products$(NC)"; \
 		find $(DERIVED_DATA_PATH) -name "*.app" -type d; \
 		exit 1; \
 	fi; \
-	echo "Found app at: $$APP_PATH"; \
+	echo "$(CYAN)Found app at: $$APP_PATH$(NC)"; \
 	$(MKDIR) $(IPA_DIR)/Payload; \
 	$(CP) "$$APP_PATH" $(IPA_DIR)/Payload/; \
+	\
 	if [ -f "$(ENTITLEMENTS)" ]; then \
-		echo "Copying entitlements file..."; \
+		echo "$(CYAN)Copying entitlements file...$(NC)"; \
 		$(CP) "$(ENTITLEMENTS)" "$(IPA_DIR)/Payload/$$(basename "$$APP_PATH")/"; \
 	fi; \
-	$(PLISTBUDDY) -c "Set :CFBundleIdentifier $(BUNDLE_ID)" "$(IPA_DIR)/Payload/$$(basename "$$APP_PATH")/Info.plist"; \
-	$(PLISTBUDDY) -c "Set :CFBundleVersion 1.0" "$(IPA_DIR)/Payload/$$(basename "$$APP_PATH")/Info.plist"; \
-	$(PLISTBUDDY) -c "Set :CFBundleShortVersionString 1.0" "$(IPA_DIR)/Payload/$$(basename "$$APP_PATH")/Info.plist"; \
+	\
+	INFO_PLIST="$(IPA_DIR)/Payload/$$(basename "$$APP_PATH")/Info.plist"; \
+	if [ ! -f "$$INFO_PLIST" ]; then \
+		echo "$(RED)Error: Info.plist not found at $$INFO_PLIST$(NC)"; \
+		exit 1; \
+	fi; \
+	\
+	echo "$(CYAN)Updating app metadata...$(NC)"; \
+	$(PLISTBUDDY) -c "Set :CFBundleIdentifier $(BUNDLE_ID)" "$$INFO_PLIST"; \
+	$(PLISTBUDDY) -c "Set :CFBundleVersion $(BUILD_NUMBER)" "$$INFO_PLIST"; \
+	$(PLISTBUDDY) -c "Set :CFBundleShortVersionString $(VERSION)" "$$INFO_PLIST"; \
+	$(PLISTBUDDY) -c "Set :MinimumOSVersion 15.0" "$$INFO_PLIST"; \
+	\
+	# Add background fetch capability if not already present \
+	$(PLISTBUDDY) -c "Add :UIBackgroundModes array" "$$INFO_PLIST" 2>/dev/null || true; \
+	$(PLISTBUDDY) -c "Add :UIBackgroundModes:0 string fetch" "$$INFO_PLIST" 2>/dev/null || true; \
+	\
+	echo "$(CYAN)Creating IPA...$(NC)"; \
 	cd $(IPA_DIR) && $(ZIP) $(IPA_NAME) Payload && $(RM) Payload; \
-	echo "Created IPA at: $(IPA_DIR)/$(IPA_NAME)"
+	$(LN) $(IPA_NAME) $(IPA_LINK); \
+	echo "$(GREEN)✓ Created IPA at: $(IPA_DIR)/$(IPA_NAME)$(NC)"
 
 # Create archive (requires signing)
 .PHONY: archive
-archive: $(ARCHIVE_PATH)
-
-$(ARCHIVE_PATH):
-	@echo "Creating archive..."
+archive: print-info
+	@echo "$(CYAN)Creating archive...$(NC)"
 	@$(XCODEBUILD) archive \
 		-project $(XCODE_PROJECT) \
 		-scheme $(XCODE_SCHEME) \
@@ -121,35 +169,87 @@ $(ARCHIVE_PATH):
 		-destination generic/platform=iOS \
 		CODE_SIGN_IDENTITY="" \
 		CODE_SIGNING_REQUIRED=NO \
-		CODE_SIGNING_ALLOWED=NO
+		CODE_SIGNING_ALLOWED=NO \
+		CURRENT_PROJECT_VERSION="$(BUILD_NUMBER)" \
+		MARKETING_VERSION="$(VERSION)" \
+		| tee $(LOG_DIR)/archive.log || { echo "$(RED)Error: Archive failed. See $(LOG_DIR)/archive.log for details.$(NC)"; exit 1; }
+	@echo "$(GREEN)✓ Archive created at $(ARCHIVE_PATH)$(NC)"
 
 # Export IPA from archive
 .PHONY: export-ipa
 export-ipa: archive
-	@echo "Exporting IPA from archive..."
+	@echo "$(CYAN)Exporting IPA from archive...$(NC)"
 	@$(XCODEBUILD) -exportArchive \
 		-archivePath $(ARCHIVE_PATH) \
 		-exportPath $(IPA_DIR) \
-		-exportOptionsPlist $(EXPORT_OPTIONS_PLIST)
+		-exportOptionsPlist $(EXPORT_OPTIONS_PLIST) \
+		| tee $(LOG_DIR)/export.log || { echo "$(RED)Error: Export failed. See $(LOG_DIR)/export.log for details.$(NC)"; exit 1; }
+	@echo "$(GREEN)✓ IPA exported to $(IPA_DIR)$(NC)"
 
 # Build IPA
 .PHONY: build-ipa
 build-ipa: create-simulator-ipa
-	@echo "IPA build complete"
-	@echo "IPA file location: $(IPA_DIR)/$(IPA_NAME)"
-	@ls -la $(IPA_DIR)/$(IPA_NAME)
+	@echo "$(GREEN)✓ IPA build complete$(NC)"
+	@echo "$(CYAN)IPA file location: $(IPA_DIR)/$(IPA_LINK)$(NC)"
+	@echo "$(CYAN)Versioned IPA: $(IPA_DIR)/$(IPA_NAME)$(NC)"
+	@ls -la $(IPA_DIR)/$(IPA_LINK)
+	@echo "$(CYAN)SHA256: $$(shasum -a 256 "$(IPA_DIR)/$(IPA_LINK)" | cut -d' ' -f1)$(NC)"
+	@echo "$(CYAN)Size: $$(du -h "$(IPA_DIR)/$(IPA_LINK)" | cut -f1)$(NC)"
+
+# Build for multiple simulators
+.PHONY: test-simulators
+test-simulators: print-info
+	@echo "$(CYAN)Building for multiple iOS simulators...$(NC)"
+	@$(XCODEBUILD) clean build \
+		-project $(XCODE_PROJECT) \
+		-scheme $(XCODE_SCHEME) \
+		-configuration Debug \
+		-sdk iphonesimulator \
+		-derivedDataPath $(DERIVED_DATA_PATH) \
+		-destination 'platform=iOS Simulator,name=iPhone 14,OS=latest' \
+		-destination 'platform=iOS Simulator,name=iPhone SE (3rd generation),OS=latest' \
+		-destination 'platform=iOS Simulator,name=iPad Pro (12.9-inch) (6th generation),OS=latest' \
+		CODE_SIGNING_REQUIRED=NO \
+		CODE_SIGNING_ALLOWED=NO \
+		CURRENT_PROJECT_VERSION="$(BUILD_NUMBER)" \
+		MARKETING_VERSION="$(VERSION)" \
+		| tee $(LOG_DIR)/test-simulators.log || { echo "$(RED)Error: Build failed. See $(LOG_DIR)/test-simulators.log for details.$(NC)"; exit 1; }
+	@echo "$(GREEN)✓ Successfully built for multiple simulators$(NC)"
 
 # Show build info
 .PHONY: info
 info:
-	@echo "Project: $(XCODE_PROJECT)"
-	@echo "Scheme: $(XCODE_SCHEME)"
-	@echo "Bundle ID: $(BUNDLE_ID)"
-	@echo "Build Directory: $(BUILD_DIR)"
-	@echo "IPA Directory: $(IPA_DIR)"
-	@echo "IPA Name: $(IPA_NAME)"
-	@echo "Derived Data Path: $(DERIVED_DATA_PATH)"
-	@echo "Archive Path: $(ARCHIVE_PATH)"
-	@echo "Export Options Plist: $(EXPORT_OPTIONS_PLIST)"
-	@echo "\nXcode Project Details:"
-	@$(XCODEBUILD) -list -project $(XCODE_PROJECT) || { echo "Error: Could not find Xcode project"; exit 1; }
+	@echo "$(CYAN)Project: $(XCODE_PROJECT)$(NC)"
+	@echo "$(CYAN)Scheme: $(XCODE_SCHEME)$(NC)"
+	@echo "$(CYAN)Bundle ID: $(BUNDLE_ID)$(NC)"
+	@echo "$(CYAN)Version: $(VERSION)$(NC)"
+	@echo "$(CYAN)Build Number: $(BUILD_NUMBER)$(NC)"
+	@echo "$(CYAN)Build Directory: $(BUILD_DIR)$(NC)"
+	@echo "$(CYAN)IPA Directory: $(IPA_DIR)$(NC)"
+	@echo "$(CYAN)IPA Name: $(IPA_NAME)$(NC)"
+	@echo "$(CYAN)Derived Data Path: $(DERIVED_DATA_PATH)$(NC)"
+	@echo "$(CYAN)Archive Path: $(ARCHIVE_PATH)$(NC)"
+	@echo "$(CYAN)Export Options Plist: $(EXPORT_OPTIONS_PLIST)$(NC)"
+	@echo "\n$(CYAN)Xcode Project Details:$(NC)"
+	@$(XCODEBUILD) -list -project $(XCODE_PROJECT) || { echo "$(RED)Error: Could not find Xcode project$(NC)"; exit 1; }
+
+# Help target
+.PHONY: help
+help:
+	@echo "$(CYAN)JIT Enabler Build System$(NC)"
+	@echo "$(CYAN)======================$(NC)"
+	@echo "Available targets:"
+	@echo "  $(GREEN)all$(NC)                - Clean, setup, and build the IPA"
+	@echo "  $(GREEN)clean$(NC)              - Clean build directory"
+	@echo "  $(GREEN)setup$(NC)              - Set up build environment"
+	@echo "  $(GREEN)build-simulator$(NC)    - Build for iOS simulator"
+	@echo "  $(GREEN)build-device$(NC)       - Build for iOS device"
+	@echo "  $(GREEN)create-simulator-ipa$(NC) - Create IPA from simulator build"
+	@echo "  $(GREEN)archive$(NC)            - Create Xcode archive"
+	@echo "  $(GREEN)export-ipa$(NC)         - Export IPA from archive"
+	@echo "  $(GREEN)build-ipa$(NC)          - Build IPA (shortcut for create-simulator-ipa)"
+	@echo "  $(GREEN)info$(NC)               - Show build information"
+	@echo "  $(GREEN)test-simulators$(NC)    - Build for multiple iOS simulators"
+	@echo "  $(GREEN)help$(NC)               - Show this help message"
+	@echo ""
+	@echo "Example: make build-ipa"
