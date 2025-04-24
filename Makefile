@@ -5,6 +5,7 @@
 PRODUCT_NAME = JITEnabler
 WORKSPACE = $(PRODUCT_NAME).xcodeproj
 SCHEME = $(PRODUCT_NAME)
+RELEASE_SCHEME = $(PRODUCT_NAME)-Release
 CONFIGURATION ?= Debug
 DEVICE ?= iPhone 15
 OS_VERSION ?= latest
@@ -70,7 +71,7 @@ build:
 .PHONY: build-release
 build-release:
 	@echo "Building $(PRODUCT_NAME) (Release)..."
-	$(XCODEBUILD) build -project $(WORKSPACE) -scheme $(SCHEME) -configuration Release -derivedDataPath $(DERIVED_DATA_PATH) | xcpretty || $(XCODEBUILD) build -project $(WORKSPACE) -scheme $(SCHEME) -configuration Release -derivedDataPath $(DERIVED_DATA_PATH)
+	$(XCODEBUILD) build -project $(WORKSPACE) -scheme $(RELEASE_SCHEME) -configuration Release -derivedDataPath $(DERIVED_DATA_PATH) | xcpretty || $(XCODEBUILD) build -project $(WORKSPACE) -scheme $(RELEASE_SCHEME) -configuration Release -derivedDataPath $(DERIVED_DATA_PATH)
 
 # Run tests
 .PHONY: test
@@ -89,7 +90,7 @@ lint:
 .PHONY: archive
 archive:
 	@echo "Creating archive..."
-	$(XCODEBUILD) archive -project $(WORKSPACE) -scheme $(SCHEME) -configuration Release -archivePath $(PRODUCT_NAME).xcarchive | xcpretty || $(XCODEBUILD) archive -project $(WORKSPACE) -scheme $(SCHEME) -configuration Release -archivePath $(PRODUCT_NAME).xcarchive
+	$(XCODEBUILD) archive -project $(WORKSPACE) -scheme $(RELEASE_SCHEME) -configuration Release -archivePath $(PRODUCT_NAME).xcarchive | xcpretty || $(XCODEBUILD) archive -project $(WORKSPACE) -scheme $(RELEASE_SCHEME) -configuration Release -archivePath $(PRODUCT_NAME).xcarchive
 
 # Export IPA from archive
 .PHONY: export-ipa
