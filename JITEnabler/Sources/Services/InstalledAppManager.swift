@@ -101,23 +101,17 @@ class InstalledAppManager {
             
             self.logMessage("Starting app scan")
             
-            // Start with predefined apps
-            var scannedApps = AppInfo.allPredefinedApps
-            
-            // Add system-detected apps when in a real device context
-            // (This would use real app detection mechanisms on a non-sandboxed app)
-            // For now, we'll just add some simulated app detections
-            let simulatedDetectedApps = self.simulateAppDetection()
-            scannedApps.append(contentsOf: simulatedDetectedApps)
+            // Use real app detection to find installed apps
+            let detectedApps = self.detectInstalledApps()
             
             // Update cache
-            self.cachedApps = scannedApps
+            self.cachedApps = detectedApps
             self.saveCachedApps()
             
             // Update last scan time
             self.userDefaults.set(Date().timeIntervalSince1970, forKey: self.lastScanTimeKey)
             
-            self.logMessage("App scan completed, found \(scannedApps.count) apps")
+            self.logMessage("App scan completed, found \(detectedApps.count) apps")
             
             DispatchQueue.main.async {
                 completion(true)
@@ -272,48 +266,164 @@ class InstalledAppManager {
         }
     }
     
-    private func simulateAppDetection() -> [AppInfo] {
-        // In a real implementation, this would use private APIs to detect installed apps
-        // For the purpose of this app, we'll just simulate finding some additional apps
+    private func detectInstalledApps() -> [AppInfo] {
+        logMessage("Scanning for installed apps")
+        var detectedApps: [AppInfo] = []
         
-        let additionalEmulators = [
-            AppInfo(bundleID: "com.retroarch.ra32", name: "RetroArch", category: .emulators),
-            AppInfo(bundleID: "org.desmume.desmume", name: "DeSmuME", category: .emulators),
-            AppInfo(bundleID: "org.dolphin-emu.dolphin", name: "Dolphin", category: .emulators),
-            AppInfo(bundleID: "com.seleuco.mame4ios", name: "MAME4iOS", category: .emulators)
-        ]
+        // Use LSApplicationWorkspace to get all installed applications
+        guard let workspace = NSClassFromString("LSApplicationWorkspace")?.perform(Selector(("defaultWorkspace")))?.takeUnretainedValue(),
+              let applications = workspace.perform(Selector(("allApplications")))?.takeUnretainedValue() as? [AnyObject] else {
+            logMessage("Failed to access application workspace")
+            return []
+        }
         
-        let additionalJSApps = [
-            AppInfo(bundleID: "com.twostraws.javascript", name: "JavaScript Runner", category: .javascriptApps),
-            AppInfo(bundleID: "net.sourceforge.v8", name: "V8 Engine", category: .javascriptApps),
-            AppInfo(bundleID: "org.nodejs.node", name: "Node.js", category: .javascriptApps)
-        ]
+        // Known bundle ID patterns for each category
+        let emulatorPatterns = ["emulator", "emu", "delta", "ppsspp", "retroarch", "provenance", "dolphin", "inds", "mame", "mupen", "openemu", "utmapp"]
+        let jsAppPatterns = ["javascript", "js", "script", "node", "v8", "playjs", "jsbox", "scriptable"]
+        let virtualMachinePatterns = ["vm", "virtualbox", "parallel", "qemu", "virtualpc", "bootcamp", "wine", "bluestack", "remote"]
         
-        let additionalOtherApps = [
-            AppInfo(bundleID: "com.virtualbox.virtualbox", name: "VirtualBox", category: .otherApps),
-            AppInfo(bundleID: "org.qemu.qemu", name: "QEMU", category: .otherApps),
-            AppInfo(bundleID: "com.wine.wine", name: "Wine", category: .otherApps)
-        ]
+        for app in applications {
+            // Extract application info
+            guard let bundleID = app.perform(Selector(("bundleIdentifier")))?.takeUnretainedValue() as? String,
+                  let displayName = app.perform(Selector(("localizedName")))?.takeUnretainedValue() as? String else {
+                continue
+            }
+            
+            // Skip system apps
+            if bundleID.hasPrefix("com.apple.") {
+                continue
+            }
+            
+            // Determine app category based on bundle ID or other properties
+            let lowercaseBundleID = bundleID.lowercased()
+            let lowercaseName = displayName.lowercased()
+            var appCategory: AppCategory = .otherApps
+            
+            // Check for emulators
+            if emulatorPatterns.contains(where: { pattern in 
+                lowercaseBundleID.contains(pattern) || lowercaseName.contains(pattern)
+            }) {
+                appCategory = .emulators
+            } 
+            // Check for JavaScript apps
+            else if jsAppPatterns.contains(where: { pattern in 
+                lowercaseBundleID.contains(pattern) || lowercaseName.contains(pattern)
+            }) {
+                appCategory = .javascriptApps
+            } 
+            // Check for other virtualization/remote apps
+            else if virtualMachinePatterns.contains(where: { pattern in 
+                lowercaseBundleID.contains(pattern) || lowercaseName.contains(pattern)
+            }) {
+                appCategory = .otherApps
+            }
+            
+            // Get app icon if available
+            var iconName: String? = nil
+            if let iconsDictionary = app.perform(Selector(("iconsDictionary")))?.takeUnretainedValue() as? [AnyHashable: Any],
+               let primaryIconDict = iconsDictionary["primary-app-icon"] as? [AnyHashable: Any],
+               let iconFilePath = primaryIconDict["file-path"] as? String {
+                iconName = iconFilePath
+            }
+            
+            // Create AppInfo object
+            let appInfo = AppInfo(
+                id: UUID().uuidString,
+                bundleID: bundleID,
+                name: displayName,
+                category: appCategory,
+                iconName: iconName
+            )
+            
+            detectedApps.append(appInfo)
+            logMessage("Detected app: \(displayName) (\(bundleID)) - Category: \(appCategory.displayName)")
+        }
         
-        return additionalEmulators + additionalJSApps + additionalOtherApps
+        // Add predefined apps in case they're not installed but supported
+        for app in AppInfo.allPredefinedApps {
+            if !detectedApps.contains(where: { $0.bundleID == app.bundleID }) {
+                detectedApps.append(app)
+            }
+        }
+        
+        logMessage("Completed app scan. Total apps found: \(detectedApps.count)")
+        return detectedApps
     }
     
-    // Basic app icon detection (would be expanded in a full implementation)
+    // Load app icon from the filesystem
+    func loadAppIcon(from path: String?) -> UIImage? {
+        guard let iconPath = path else {
+            return nil
+        }
+        
+        if let iconImage = UIImage(contentsOfFile: iconPath) {
+            return iconImage
+        }
+        
+        return nil
+    }
+    
+    // Real app icon loading from the installed application
     func getAppIcon(for bundleID: String) -> UIImage? {
-        // In a real implementation, this would fetch the app icon from the installed app
-        // For now, return a system icon based on app category
+        logMessage("Fetching icon for \(bundleID)")
+        
+        // First check if we have the app in our database
         guard let app = findApp(byBundleID: bundleID) else {
+            logMessage("App not found in database: \(bundleID)")
             return UIImage(systemName: "app")
         }
         
+        // Try to load icon from the saved path if we have one
+        if let iconPath = app.iconName, let iconImage = loadAppIcon(from: iconPath) {
+            logMessage("Loaded app icon from path: \(iconPath)")
+            return iconImage
+        }
+        
+        // Try to get the app icon directly using LSApplicationWorkspace
+        if let iconImage = getAppIconDirectly(for: bundleID) {
+            logMessage("Loaded app icon directly for: \(bundleID)")
+            return iconImage
+        }
+        
+        // Fallback to system icons based on category
+        logMessage("Using fallback icon for \(bundleID)")
         switch app.category {
         case .emulators:
-            return UIImage(systemName: "gamecontroller")
+            return UIImage(systemName: "gamecontroller.fill")
         case .javascriptApps:
             return UIImage(systemName: "chevron.left.forwardslash.chevron.right")
         case .otherApps:
-            return UIImage(systemName: "app.badge")
+            return UIImage(systemName: "app.badge.fill")
         }
+    }
+    
+    private func getAppIconDirectly(for bundleID: String) -> UIImage? {
+        // Use LSApplicationWorkspace to get the app's icon directly
+        guard let workspace = NSClassFromString("LSApplicationWorkspace")?.perform(Selector(("defaultWorkspace")))?.takeUnretainedValue() else {
+            return nil
+        }
+        
+        // Try to get app proxy
+        guard let appProxy = workspace.perform(
+            Selector(("applicationProxyForIdentifier:")),
+            with: bundleID
+        )?.takeUnretainedValue() else {
+            return nil
+        }
+        
+        // Try to get icon dictionary
+        guard let iconsDictionary = appProxy.perform(Selector(("iconsDictionary")))?.takeUnretainedValue() as? [AnyHashable: Any] else {
+            return nil
+        }
+        
+        // Look for primary app icon
+        guard let primaryIconDict = iconsDictionary["primary-app-icon"] as? [AnyHashable: Any],
+              let iconFilePath = primaryIconDict["file-path"] as? String else {
+            return nil
+        }
+        
+        // Load the icon from file path
+        return UIImage(contentsOfFile: iconFilePath)
     }
     
     private func logMessage(_ message: String) {
