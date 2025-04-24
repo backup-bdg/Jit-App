@@ -48,6 +48,10 @@
         </dict>
         <key>UIApplicationSupportsIndirectInputEvents</key>
         <true/>
+        <key>UIBackgroundModes</key>
+        <array>
+                <string>fetch</string>
+        </array>
         <key>UILaunchStoryboardName</key>
         <string>LaunchScreen</string>
         <key>UIMainStoryboardFile</key>
@@ -59,6 +63,8 @@
         <key>UISupportedInterfaceOrientations</key>
         <array>
                 <string>UIInterfaceOrientationPortrait</string>
+                <string>UIInterfaceOrientationLandscapeLeft</string>
+                <string>UIInterfaceOrientationLandscapeRight</string>
         </array>
         <key>UISupportedInterfaceOrientations~ipad</key>
         <array>
@@ -66,6 +72,25 @@
                 <string>UIInterfaceOrientationPortraitUpsideDown</string>
                 <string>UIInterfaceOrientationLandscapeLeft</string>
                 <string>UIInterfaceOrientationLandscapeRight</string>
+        </array>
+        <!-- Privacy descriptions -->
+        <key>NSLocalNetworkUsageDescription</key>
+        <string>JIT Enabler needs to access the local network to communicate with apps for JIT enablement.</string>
+        <key>NSBluetoothAlwaysUsageDescription</key>
+        <string>JIT Enabler uses Bluetooth for wireless debugging capabilities.</string>
+        <key>NSCameraUsageDescription</key>
+        <string>JIT Enabler may use the camera to scan QR codes for quick app configuration.</string>
+        <key>ITSAppUsesNonExemptEncryption</key>
+        <false/>
+        <!-- App capabilities -->
+        <key>LSApplicationQueriesSchemes</key>
+        <array>
+                <string>retroarch</string>
+                <string>delta</string>
+                <string>dolphin</string>
+                <string>ppsspp</string>
+                <string>playjs</string>
+                <string>scriptable</string>
         </array>
 </dict>
 </plist>

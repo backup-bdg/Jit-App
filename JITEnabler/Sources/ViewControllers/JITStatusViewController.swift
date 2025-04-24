@@ -16,6 +16,7 @@ class JITStatusViewController: UIViewController {
     private var app: AppInfo!
     private var jitResponse: JITEnablementResponse!
     private let jitService = JITService.shared
+    private let loggingEnabled = true
     
     // MARK: - Lifecycle
     
@@ -26,11 +27,18 @@ class JITStatusViewController: UIViewController {
         updateUI()
     }
     
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        
+        logMessage("Viewing JIT status for \(app?.name ?? "unknown app")")
+    }
+    
     // MARK: - Configuration
     
     func configure(with app: AppInfo, response: JITEnablementResponse) {
         self.app = app
         self.jitResponse = response
+        logMessage("Configured with app: \(app.name) and session ID: \(response.sessionId)")
     }
     
     // MARK: - UI Setup
@@ -50,20 +58,30 @@ class JITStatusViewController: UIViewController {
         instructionsTextView.layer.cornerRadius = 8
         instructionsTextView.clipsToBounds = true
         instructionsTextView.isEditable = false
+        
+        // Set status label initial state
+        statusLabel.text = "Waiting to Apply JIT"
+        statusLabel.textColor = .systemOrange
     }
     
     private func updateUI() {
-        guard let app = app, let jitResponse = jitResponse else { return }
+        guard let app = app, let jitResponse = jitResponse else { 
+            logMessage("Cannot update UI: app or jitResponse is nil")
+            return 
+        }
         
         // Update labels
         appNameLabel.text = app.name
         bundleIDLabel.text = app.bundleID
-        statusLabel.text = "JIT Enabled"
         methodLabel.text = "Method: \(jitResponse.method)"
         
         // Format instructions
         var instructionsText = "Session ID: \(jitResponse.sessionId)\n\n"
-        instructionsText += "Token: \(jitResponse.token)\n\n"
+        
+        // Mask the token for security in the UI
+        let maskedToken = maskToken(jitResponse.token)
+        instructionsText += "Token: \(maskedToken)\n\n"
+        
         instructionsText += "Instructions:\n"
         
         if let toggleWx = jitResponse.instructions.toggleWxMemory {
@@ -83,6 +101,15 @@ class JITStatusViewController: UIViewController {
         }
         
         instructionsTextView.text = instructionsText
+        
+        // Check if JIT is already enabled for this app
+        if jitService.isJITEnabled(for: app.bundleID) {
+            statusLabel.text = "JIT Already Enabled"
+            statusLabel.textColor = .systemGreen
+            applyButton.isEnabled = false
+            applyButton.alpha = 0.5
+            doneButton.isHidden = false
+        }
     }
     
     // MARK: - Actions
@@ -92,6 +119,7 @@ class JITStatusViewController: UIViewController {
     }
     
     @IBAction func doneButtonTapped(_ sender: UIButton) {
+        logMessage("Done button tapped, returning to root view controller")
         // Return to root view controller
         navigationController?.popToRootViewController(animated: true)
     }
@@ -99,43 +127,81 @@ class JITStatusViewController: UIViewController {
     // MARK: - Private Methods
     
     private func applyJITInstructions() {
+        guard let app = app, let jitResponse = jitResponse else {
+            logMessage("Cannot apply JIT instructions: app or jitResponse is nil")
+            showErrorAlert(message: "Missing app information. Please try again.")
+            return
+        }
+        
+        logMessage("Starting to apply JIT instructions for \(app.name)")
+        
         // Show loading state
         applyButton.isHidden = true
+        statusLabel.text = "Applying JIT..."
+        statusLabel.textColor = .systemBlue
         activityIndicator.startAnimating()
         
-        jitService.applyJITInstructions(jitResponse.instructions) { [weak self] success in
+        // Pass the app information to the JIT service
+        jitService.applyJITInstructions(jitResponse.instructions, for: app) { [weak self] success in
+            guard let self = self else { return }
+            
             // Hide loading state
-            self?.activityIndicator.stopAnimating()
+            self.activityIndicator.stopAnimating()
             
             if success {
+                self.logMessage("JIT instructions applied successfully for \(app.name)")
+                
                 // Show success state
-                self?.statusLabel.text = "JIT Applied Successfully"
-                self?.statusLabel.textColor = .systemGreen
-                self?.doneButton.isHidden = false
+                self.statusLabel.text = "JIT Applied Successfully"
+                self.statusLabel.textColor = .systemGreen
+                self.doneButton.isHidden = false
                 
                 // Show success message
                 let alert = UIAlertController(
                     title: "Success",
-                    message: "JIT has been successfully enabled for \(self?.app.name ?? "the app"). You can now launch the app and use JIT features.",
+                    message: "JIT has been successfully enabled for \(app.name). You can now launch the app and use JIT features.",
                     preferredStyle: .alert
                 )
                 alert.addAction(UIAlertAction(title: "OK", style: .default))
-                self?.present(alert, animated: true)
+                self.present(alert, animated: true)
             } else {
+                self.logMessage("Failed to apply JIT instructions for \(app.name)")
+                
                 // Show failure state
-                self?.statusLabel.text = "JIT Application Failed"
-                self?.statusLabel.textColor = .systemRed
-                self?.applyButton.isHidden = false
+                self.statusLabel.text = "JIT Application Failed"
+                self.statusLabel.textColor = .systemRed
+                self.applyButton.isHidden = false
                 
                 // Show error message
-                let alert = UIAlertController(
-                    title: "Error",
-                    message: "Failed to apply JIT instructions. Please try again.",
-                    preferredStyle: .alert
-                )
-                alert.addAction(UIAlertAction(title: "OK", style: .default))
-                self?.present(alert, animated: true)
+                self.showErrorAlert(message: "Failed to apply JIT instructions. Please try again.")
             }
+        }
+    }
+    
+    private func showErrorAlert(message: String) {
+        let alert = UIAlertController(
+            title: "Error",
+            message: message,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+    
+    private func maskToken(_ token: String) -> String {
+        if token.count <= 8 {
+            return token
+        }
+        
+        let prefix = String(token.prefix(4))
+        let suffix = String(token.suffix(4))
+        return "\(prefix)...\(suffix)"
+    }
+    
+    private func logMessage(_ message: String) {
+        if loggingEnabled {
+            let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timestamp)] JITStatusVC: \(message)")
         }
     }
 }
