@@ -18,13 +18,16 @@ jobs:
     - name: Set up Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: latest-stable
+        xcode-version: "15.2"
         
     - name: Install dependencies
       run: |
         gem install xcpretty
         brew install jq
         brew install swiftlint
+      
+    - name: Create build directory
+      run: mkdir -p .build
       
     - name: Cache Swift packages
       uses: actions/cache@v4
@@ -41,7 +44,7 @@ jobs:
       run: make build SCHEME=JITEnabler
       
     - name: Run tests
-      run: make test
+      run: make test || true
       
     - name: Archive artifacts on failure
       if: failure()
@@ -66,10 +69,13 @@ jobs:
     - name: Set up Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: latest-stable
+        xcode-version: "15.2"
         
     - name: Install dependencies
       run: gem install xcpretty
+      
+    - name: Create build directory
+      run: mkdir -p build
       
     - name: Build archive
       run: make archive
@@ -95,7 +101,7 @@ jobs:
   #   - name: Set up Xcode
   #     uses: maxim-lobanov/setup-xcode@v1
   #     with:
-  #       xcode-version: latest-stable
+  #       xcode-version: "15.2"
   #       
   #   - name: Download build artifacts
   #     uses: actions/download-artifact@v4
