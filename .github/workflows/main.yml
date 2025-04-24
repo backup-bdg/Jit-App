@@ -38,7 +38,7 @@ jobs:
       run: make lint
       
     - name: Build app
-      run: make build
+      run: make build SCHEME=JITEnabler
       
     - name: Run tests
       run: make test
