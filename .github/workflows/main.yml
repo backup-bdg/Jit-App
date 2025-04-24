@@ -22,7 +22,7 @@ jobs:
         
     - name: Install dependencies
       run: |
-        brew install xcpretty
+        gem install xcpretty
         brew install jq
         brew install swiftlint
       
@@ -69,7 +69,7 @@ jobs:
         xcode-version: latest-stable
         
     - name: Install dependencies
-      run: brew install xcpretty
+      run: gem install xcpretty
       
     - name: Build archive
       run: make archive
@@ -132,4 +132,7 @@ jobs:
   #       
   #       # Export IPA and upload to TestFlight
   #       make export-ipa
+  #       # Note: altool is deprecated, using App Store Connect API is recommended
   #       xcrun altool --upload-app -f build/*.ipa --apiKey $APP_STORE_CONNECT_API_KEY_ID --apiIssuer $APP_STORE_CONNECT_API_ISSUER_ID
+  #       # Alternative using newer xcrun command:
+  #       # xcrun notarytool submit build/*.ipa --keychain-profile "AppStore" --wait
