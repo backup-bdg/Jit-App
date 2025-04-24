@@ -13,7 +13,7 @@ jobs:
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Set up Xcode
       uses: maxim-lobanov/setup-xcode@v1
@@ -27,7 +27,7 @@ jobs:
         brew install swiftlint
       
     - name: Cache Swift packages
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: .build
         key: ${{ runner.os }}-spm-${{ hashFiles('**/*.xcodeproj') }}
@@ -45,7 +45,7 @@ jobs:
       
     - name: Archive artifacts on failure
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: build-logs
         path: |
@@ -61,7 +61,7 @@ jobs:
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Set up Xcode
       uses: maxim-lobanov/setup-xcode@v1
@@ -75,7 +75,7 @@ jobs:
       run: make archive
       
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: JITEnabler-${{ github.sha }}
         path: JITEnabler.xcarchive
@@ -90,7 +90,7 @@ jobs:
   #   
   #   steps:
   #   - name: Checkout repository
-  #     uses: actions/checkout@v3
+  #     uses: actions/checkout@v4
   #     
   #   - name: Set up Xcode
   #     uses: maxim-lobanov/setup-xcode@v1
@@ -98,7 +98,7 @@ jobs:
   #       xcode-version: latest-stable
   #       
   #   - name: Download build artifacts
-  #     uses: actions/download-artifact@v3
+  #     uses: actions/download-artifact@v4
   #     with:
   #       name: JITEnabler-${{ github.sha }}
   #       path: ./
