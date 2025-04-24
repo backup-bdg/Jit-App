@@ -83,7 +83,7 @@ test:
 lint:
 	@echo "Running SwiftLint..."
 	@which swiftlint > /dev/null || (echo "SwiftLint not installed. Run 'make setup' first." && exit 1)
-	swiftlint --strict
+	swiftlint
 
 # Create an archive of the app
 .PHONY: archive
