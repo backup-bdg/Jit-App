@@ -1,0 +1,155 @@
+# Makefile for building JITEnabler iOS app
+
+# Configuration
+XCODE_PROJECT := JITEnabler.xcodeproj
+XCODE_SCHEME := JITEnabler
+BUNDLE_ID := com.jitenabler.app
+BUILD_DIR := build
+IPA_DIR := $(BUILD_DIR)/ios/ipa
+ARCHIVE_PATH := $(BUILD_DIR)/JITEnabler.xcarchive
+EXPORT_OPTIONS_PLIST := ExportOptions.plist
+DERIVED_DATA_PATH := $(BUILD_DIR)/DerivedData
+IPA_NAME := JITEnabler.ipa
+ENTITLEMENTS := JITEnabler/JITEnabler.entitlements
+
+# Tools
+XCODEBUILD := xcodebuild
+MKDIR := mkdir -p
+RM := rm -rf
+CP := cp -r
+ZIP := zip -r
+PLISTBUDDY := /usr/libexec/PlistBuddy
+
+# Default target
+.PHONY: all
+all: clean setup build-ipa
+
+# Clean build artifacts
+.PHONY: clean
+clean:
+	@echo "Cleaning build directory..."
+	@$(RM) $(BUILD_DIR)
+	@$(MKDIR) $(BUILD_DIR) $(IPA_DIR)
+
+# Setup environment
+.PHONY: setup
+setup: .env $(EXPORT_OPTIONS_PLIST)
+
+.env:
+	@echo "Creating .env file..."
+	@echo "DROPBOX_APP_KEY=2bi422xpd3xd962" > $@
+	@echo "DROPBOX_APP_SECRET=j3yx0b41qdvfu86" >> $@
+	@echo "DROPBOX_REFRESH_TOKEN=RvyL03RE5qAAAAAAAAAAAVMVebvE7jDx8Okd0ploMzr85c6txvCRXpJAt30mxrKF" >> $@
+
+$(EXPORT_OPTIONS_PLIST):
+	@echo "Creating export options plist..."
+	@printf '<?xml version="1.0" encoding="UTF-8"?>\n' > $@
+	@printf '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' >> $@
+	@printf '<plist version="1.0">\n' >> $@
+	@printf '<dict>\n' >> $@
+	@printf '\t<key>method</key>\n' >> $@
+	@printf '\t<string>development</string>\n' >> $@
+	@printf '\t<key>compileBitcode</key>\n' >> $@
+	@printf '\t<false/>\n' >> $@
+	@printf '\t<key>signingStyle</key>\n' >> $@
+	@printf '\t<string>automatic</string>\n' >> $@
+	@printf '</dict>\n' >> $@
+	@printf '</plist>\n' >> $@
+
+# Build for device (requires signing)
+.PHONY: build-device
+build-device:
+	@echo "Building for iOS device..."
+	@$(XCODEBUILD) clean build \
+		-project $(XCODE_PROJECT) \
+		-scheme $(XCODE_SCHEME) \
+		-configuration Release \
+		-sdk iphoneos \
+		-derivedDataPath $(DERIVED_DATA_PATH) \
+		CODE_SIGN_IDENTITY="" \
+		CODE_SIGNING_REQUIRED=NO \
+		CODE_SIGNING_ALLOWED=NO
+
+# Build for simulator (no signing required)
+.PHONY: build-simulator
+build-simulator:
+	@echo "Building for iOS simulator..."
+	@$(XCODEBUILD) clean build \
+		-project $(XCODE_PROJECT) \
+		-scheme $(XCODE_SCHEME) \
+		-configuration Debug \
+		-sdk iphonesimulator \
+		-derivedDataPath $(DERIVED_DATA_PATH) \
+		CODE_SIGNING_REQUIRED=NO \
+		CODE_SIGNING_ALLOWED=NO \
+		CODE_SIGN_ENTITLEMENTS=$(ENTITLEMENTS)
+
+# Create IPA from simulator build
+.PHONY: create-simulator-ipa
+create-simulator-ipa: build-simulator
+	@echo "Creating IPA from simulator build..."
+	@APP_PATH=$$(find $(DERIVED_DATA_PATH)/Build/Products -name "*.app" -type d | head -1); \
+	if [ -z "$$APP_PATH" ]; then \
+		echo "Error: Could not find .app file in build products"; \
+		find $(DERIVED_DATA_PATH) -name "*.app" -type d; \
+		exit 1; \
+	fi; \
+	echo "Found app at: $$APP_PATH"; \
+	$(MKDIR) $(IPA_DIR)/Payload; \
+	$(CP) "$$APP_PATH" $(IPA_DIR)/Payload/; \
+	if [ -f "$(ENTITLEMENTS)" ]; then \
+		echo "Copying entitlements file..."; \
+		$(CP) "$(ENTITLEMENTS)" "$(IPA_DIR)/Payload/$$(basename "$$APP_PATH")/"; \
+	fi; \
+	$(PLISTBUDDY) -c "Set :CFBundleIdentifier $(BUNDLE_ID)" "$(IPA_DIR)/Payload/$$(basename "$$APP_PATH")/Info.plist"; \
+	$(PLISTBUDDY) -c "Set :CFBundleVersion 1.0" "$(IPA_DIR)/Payload/$$(basename "$$APP_PATH")/Info.plist"; \
+	$(PLISTBUDDY) -c "Set :CFBundleShortVersionString 1.0" "$(IPA_DIR)/Payload/$$(basename "$$APP_PATH")/Info.plist"; \
+	cd $(IPA_DIR) && $(ZIP) $(IPA_NAME) Payload && $(RM) Payload; \
+	echo "Created IPA at: $(IPA_DIR)/$(IPA_NAME)"
+
+# Create archive (requires signing)
+.PHONY: archive
+archive: $(ARCHIVE_PATH)
+
+$(ARCHIVE_PATH):
+	@echo "Creating archive..."
+	@$(XCODEBUILD) archive \
+		-project $(XCODE_PROJECT) \
+		-scheme $(XCODE_SCHEME) \
+		-configuration Release \
+		-archivePath $(ARCHIVE_PATH) \
+		-destination generic/platform=iOS \
+		CODE_SIGN_IDENTITY="" \
+		CODE_SIGNING_REQUIRED=NO \
+		CODE_SIGNING_ALLOWED=NO
+
+# Export IPA from archive
+.PHONY: export-ipa
+export-ipa: archive
+	@echo "Exporting IPA from archive..."
+	@$(XCODEBUILD) -exportArchive \
+		-archivePath $(ARCHIVE_PATH) \
+		-exportPath $(IPA_DIR) \
+		-exportOptionsPlist $(EXPORT_OPTIONS_PLIST)
+
+# Build IPA
+.PHONY: build-ipa
+build-ipa: create-simulator-ipa
+	@echo "IPA build complete"
+	@echo "IPA file location: $(IPA_DIR)/$(IPA_NAME)"
+	@ls -la $(IPA_DIR)/$(IPA_NAME)
+
+# Show build info
+.PHONY: info
+info:
+	@echo "Project: $(XCODE_PROJECT)"
+	@echo "Scheme: $(XCODE_SCHEME)"
+	@echo "Bundle ID: $(BUNDLE_ID)"
+	@echo "Build Directory: $(BUILD_DIR)"
+	@echo "IPA Directory: $(IPA_DIR)"
+	@echo "IPA Name: $(IPA_NAME)"
+	@echo "Derived Data Path: $(DERIVED_DATA_PATH)"
+	@echo "Archive Path: $(ARCHIVE_PATH)"
+	@echo "Export Options Plist: $(EXPORT_OPTIONS_PLIST)"
+	@echo "\nXcode Project Details:"
+	@$(XCODEBUILD) -list -project $(XCODE_PROJECT) || { echo "Error: Could not find Xcode project"; exit 1; }
