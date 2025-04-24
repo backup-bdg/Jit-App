@@ -346,6 +346,16 @@ class InstalledAppManager {
         return detectedApps
     }
     
+    private func logMessage(_ message: String) {
+        if loggingEnabled {
+            let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timestamp)] AppManager: \(message)")
+        }
+    }
+}
+
+// MARK: - Icon Management Extension
+extension InstalledAppManager {
     // Load app icon from the filesystem
     func loadAppIcon(from path: String?) -> UIImage? {
         guard let iconPath = path else {
@@ -420,12 +430,5 @@ class InstalledAppManager {
         
         // Load the icon from file path
         return UIImage(contentsOfFile: iconFilePath)
-    }
-    
-    private func logMessage(_ message: String) {
-        if loggingEnabled {
-            let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timestamp)] AppManager: \(message)")
-        }
     }
 }

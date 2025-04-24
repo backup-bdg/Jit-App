@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import MachO
 
+// Main JITService class for handling JIT enablement
 class JITService {
     static let shared = JITService()
     
@@ -23,8 +24,11 @@ class JITService {
         }
     }
     
-    // MARK: - Public Methods
-    
+    // MARK: - Public API
+}
+
+// MARK: - Device Registration
+extension JITService {
     func registerDevice(completion: @escaping (Result<Bool, Error>) -> Void) {
         guard let baseURL = sessionManager.backendURL else {
             completion(.failure(JITError.missingBackendURL))
@@ -155,6 +159,10 @@ class JITService {
         }
     }
     
+}
+
+// MARK: - Session Management
+extension JITService {
     func getDeviceSessions(completion: @escaping (Result<[JITSession], Error>) -> Void) {
         guard let baseURL = sessionManager.backendURL else {
             completion(.failure(JITError.missingBackendURL))
@@ -189,7 +197,10 @@ class JITService {
     func isDeviceRegistered() -> Bool {
         return keychainHelper.getToken() != nil
     }
-    
+}
+
+// MARK: - JIT Management
+extension JITService {
     func isJITEnabled(for bundleID: String) -> Bool {
         return jitEnabledApps.contains(bundleID)
     }
@@ -453,7 +464,11 @@ class JITService {
         }
     }
     
-    private func modifyMemoryRegions(_ regions: [MemoryRegion], for bundleID: String) -> Bool {
+}
+
+// MARK: - Private Process and Memory Manipulation
+private extension JITService {
+    func modifyMemoryRegions(_ regions: [MemoryRegion], for bundleID: String) -> Bool {
         logMessage("Modifying \(regions.count) memory regions for app: \(bundleID)")
         
         guard let pid = getProcessID(for: bundleID) else {
@@ -577,8 +592,9 @@ class JITService {
     }
 }
 
-// MARK: - Error Types
+}
 
+// MARK: - Error Types
 enum JITError: Error, LocalizedError {
     case missingBackendURL
     case authenticationFailed

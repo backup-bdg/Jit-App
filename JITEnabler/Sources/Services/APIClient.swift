@@ -18,6 +18,7 @@ extension String {
     }
 }
 
+// MARK: - Main APIClient Class
 class APIClient {
     static let shared = APIClient()
     
