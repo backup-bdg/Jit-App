@@ -21,10 +21,8 @@ class MemoryManagementService {
         }
         
         // Process each memory region
-        for (index, region) in regions.enumerated() {
-            if !processMemoryRegion(index: index, region: region, pid: pid) {
-                return false
-            }
+        for (index, region) in regions.enumerated() where !processMemoryRegion(index: index, region: region, pid: pid) {
+            return false
         }
         
         // All regions processed successfully

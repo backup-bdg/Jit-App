@@ -87,7 +87,7 @@ class SessionManagementService {
         let request = apiRequest.asURLRequest(token: token)
         
         // Execute request
-        let task = urlSession.dataTask(with: request) { [weak self] data, response, error in
+        let task = urlSession.dataTask(with: request) { [weak self] _, response, error in
             guard let self = self else { return }
             
             // Handle response with a simple success/failure
@@ -104,7 +104,7 @@ class SessionManagementService {
             }
             
             // Check if the request was successful based on HTTP status code
-            if (200...299).contains(httpResponse.statusCode) {
+            if 200...299 ~= httpResponse.statusCode {
                 self.logMessage("Session cancellation successful")
                 completion(.success(true))
             } else {

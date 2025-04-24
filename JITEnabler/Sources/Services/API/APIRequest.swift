@@ -49,7 +49,7 @@ struct APIRequest {
         }
         
         // Add parameters to the request body for POST, PUT methods
-        if let parameters = parameters, (method == .post || method == .put) {
+        if let parameters = parameters, method == .post || method == .put {
             do {
                 request.httpBody = try JSONSerialization.data(withJSONObject: parameters, options: [])
             } catch {
