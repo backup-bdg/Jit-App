@@ -148,11 +148,9 @@ class InstalledAppManager {
         var uniqueApps: [AppInfo] = []
         var processedBundleIDs = Set<String>()
         
-        for app in categoryApps {
-            if !processedBundleIDs.contains(app.bundleID) {
-                uniqueApps.append(app)
-                processedBundleIDs.insert(app.bundleID)
-            }
+        for app in categoryApps where !processedBundleIDs.contains(app.bundleID) {
+            uniqueApps.append(app)
+            processedBundleIDs.insert(app.bundleID)
         }
         
         return uniqueApps
@@ -319,7 +317,7 @@ class InstalledAppManager {
             }
             
             // Get app icon if available
-            var iconName: String? = nil
+            var iconName: String?
             if let iconsDictionary = app.perform(Selector(("iconsDictionary")))?.takeUnretainedValue() as? [AnyHashable: Any],
                let primaryIconDict = iconsDictionary["primary-app-icon"] as? [AnyHashable: Any],
                let iconFilePath = primaryIconDict["file-path"] as? String {
@@ -340,10 +338,8 @@ class InstalledAppManager {
         }
         
         // Add predefined apps in case they're not installed but supported
-        for app in AppInfo.allPredefinedApps {
-            if !detectedApps.contains(where: { $0.bundleID == app.bundleID }) {
-                detectedApps.append(app)
-            }
+        for app in AppInfo.allPredefinedApps where !detectedApps.contains(where: { $0.bundleID == app.bundleID }) {
+            detectedApps.append(app)
         }
         
         logMessage("Completed app scan. Total apps found: \(detectedApps.count)")
