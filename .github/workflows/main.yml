@@ -1,1 +1,135 @@
+name: iOS CI/CD
 
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Set up Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+        
+    - name: Install dependencies
+      run: |
+        brew install xcpretty
+        brew install jq
+        brew install swiftlint
+      
+    - name: Cache Swift packages
+      uses: actions/cache@v3
+      with:
+        path: .build
+        key: ${{ runner.os }}-spm-${{ hashFiles('**/*.xcodeproj') }}
+        restore-keys: |
+          ${{ runner.os }}-spm-
+          
+    - name: Run SwiftLint
+      run: make lint
+      
+    - name: Build app
+      run: make build
+      
+    - name: Run tests
+      run: make test
+      
+    - name: Archive artifacts on failure
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-logs
+        path: |
+          /tmp/*.log
+          DerivedData/Logs/
+        retention-days: 5
+
+  build-release:
+    name: Build Release
+    runs-on: macos-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    needs: build-and-test
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Set up Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+        
+    - name: Install dependencies
+      run: brew install xcpretty
+      
+    - name: Build archive
+      run: make archive
+      
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: JITEnabler-${{ github.sha }}
+        path: JITEnabler.xcarchive
+        retention-days: 14
+        
+  # Uncomment this job once you have Code Signing set up properly
+  # deploy:
+  #   name: Deploy to TestFlight
+  #   runs-on: macos-latest
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  #   needs: build-release
+  #   
+  #   steps:
+  #   - name: Checkout repository
+  #     uses: actions/checkout@v3
+  #     
+  #   - name: Set up Xcode
+  #     uses: maxim-lobanov/setup-xcode@v1
+  #     with:
+  #       xcode-version: latest-stable
+  #       
+  #   - name: Download build artifacts
+  #     uses: actions/download-artifact@v3
+  #     with:
+  #       name: JITEnabler-${{ github.sha }}
+  #       path: ./
+  #   
+  #   - name: Install Apple certificate
+  #     env:
+  #       BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+  #       P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+  #       KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+  #     run: |
+  #       # Create temporary keychain
+  #       security create-keychain -p "${KEYCHAIN_PASSWORD}" build.keychain
+  #       security default-keychain -s build.keychain
+  #       security unlock-keychain -p "${KEYCHAIN_PASSWORD}" build.keychain
+  #       security set-keychain-settings -t 3600 -u build.keychain
+  #       
+  #       # Import certificate
+  #       echo $BUILD_CERTIFICATE_BASE64 | base64 --decode -o certificate.p12
+  #       security import certificate.p12 -k build.keychain -P "${P12_PASSWORD}" -T /usr/bin/codesign
+  #       security set-key-partition-list -S apple-tool:,apple: -s -k "${KEYCHAIN_PASSWORD}" build.keychain
+  #   
+  #   - name: Deploy to TestFlight
+  #     env:
+  #       APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+  #       APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+  #       APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+  #     run: |
+  #       # Set up API keys for App Store Connect
+  #       mkdir -p ~/.appstoreconnect/private_keys/
+  #       echo "${APP_STORE_CONNECT_API_KEY_CONTENT}" > ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
+  #       
+  #       # Export IPA and upload to TestFlight
+  #       make export-ipa
+  #       xcrun altool --upload-app -f build/*.ipa --apiKey $APP_STORE_CONNECT_API_KEY_ID --apiIssuer $APP_STORE_CONNECT_API_ISSUER_ID
