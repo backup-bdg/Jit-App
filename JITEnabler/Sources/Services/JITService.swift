@@ -344,7 +344,7 @@ class JITService {
         logMessage("Launching app: \(bundleID)")
         
         // Check if app is already running
-        if let _ = getProcessID(for: bundleID) {
+        if getProcessID(for: bundleID) != nil {
             logMessage("App is already running: \(bundleID)")
             return true
         }
@@ -368,7 +368,7 @@ class JITService {
             
             // Wait for the app to fully launch
             for _ in 0..<10 { // Try for a few seconds
-                if let _ = getProcessID(for: bundleID) {
+                if getProcessID(for: bundleID) != nil {
                     logMessage("App launch confirmed: \(bundleID)")
                     return true
                 }
@@ -415,7 +415,7 @@ class JITService {
         
         // Example implementation:
         var task: UInt32 = 0
-        let result = withUnsafeMutablePointer(to: &task) { taskPtr -> kern_return_t in
+        let result = withUnsafeMutablePointer(to: &task) { _ -> kern_return_t in
             // task_for_pid would be called here in a real implementation
             // This is a privileged operation that requires entitlements
             return 0 // KERN_SUCCESS for testing

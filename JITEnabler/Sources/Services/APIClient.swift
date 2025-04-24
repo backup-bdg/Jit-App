@@ -4,7 +4,9 @@ import CommonCrypto
 // MD5 extension for String to support token generation
 extension String {
     func md5() -> String {
-        let data = self.data(using: .utf8)!
+        guard let data = self.data(using: .utf8) else {
+            return ""
+        }
         var digest = [UInt8](repeating: 0, count: Int(CC_MD5_DIGEST_LENGTH))
         
         _ = data.withUnsafeBytes { bytes in
